@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import android.annotation.SuppressLint;
 import android.app.SearchManager;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -26,10 +27,14 @@ import android.support.v7.widget.SearchView.OnSuggestionListener;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
+import android.widget.AbsListView;
+import android.widget.AbsListView.OnScrollListener;
 import android.widget.GridView;
 
 import com.riddimon.pickpix.api.ImageResult;
 import com.riddimon.pickpix.api.ImageSearchRequest;
+import com.riddimon.pickpix.api.ResultCursor;
+import com.riddimon.pickpix.api.ResultCursor.Page;
 import com.riddimon.pickpix.db.SearchProvider;
 
 public class SearchActivity extends ActionBarActivity implements LoaderCallbacks<Cursor> {
@@ -38,8 +43,10 @@ public class SearchActivity extends ActionBarActivity implements LoaderCallbacks
 	private boolean mRegistered;
 	private String mQuery;
 
+	EndlessScrollListener mScrollListener = null;
 	SampleGridViewAdapter mAdapter = null;
 	GridView mGridview = null;
+	ResultCursor mResultCursor;
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -56,6 +63,12 @@ public class SearchActivity extends ActionBarActivity implements LoaderCallbacks
 		} else {
 			lm.initLoader(LOADER, null, this);
 		}
+		if (savedInstanceState != null) {
+			mQuery = savedInstanceState.getString("query");
+			mResultCursor = savedInstanceState.getParcelable("results");
+		}
+		mScrollListener = new EndlessScrollListener();
+		mGridview.setOnScrollListener(mScrollListener);
 	}
 
 	@Override
@@ -67,7 +80,7 @@ public class SearchActivity extends ActionBarActivity implements LoaderCallbacks
 	        SearchRecentSuggestions suggestions = new SearchRecentSuggestions(this,
 	                SearchProvider.AUTHORITY, SearchProvider.MODE);
 	        suggestions.saveRecentQuery(query, null);
-	        doSearch(query);
+	        doSearch(true, query);
 	    }
 	}
 
@@ -85,14 +98,37 @@ public class SearchActivity extends ActionBarActivity implements LoaderCallbacks
 		}
 	}
 
-	private void doSearch(String query) {
+	private void doSearch(boolean fresh, String query) {
 		// do search s
+		mQuery = query;
 		setProgressBarIndeterminateVisibility(true);
 		ImageSearchRequest req = new ImageSearchRequest();
 		req.query = query;
 		req.pageSize = 8;
 		req.start = 0;
-		getContentResolver().delete(ImageResult.URI, null, null);
+		if (fresh || mResultCursor == null) {
+			getContentResolver().delete(ImageResult.URI, null, null);
+		} else {
+			Page p = null;
+			int wantedPage = 1;
+			ContentResolver cr = getContentResolver();
+			Cursor c = cr.query(ImageResult.URI, null, ImageResult.COL_QUERY + " = '" + query + "' AND "
+					+ ImageResult.COL_PAGE_NUM + " >= " + wantedPage, null, ImageResult.COL_PAGE_NUM + " DESC");
+			if (c != null && c.moveToFirst()) {
+				ImageResult res = ImageResult.fromCursor(c);
+				for (Page ps : mResultCursor.pages) {
+					int label = Integer.parseInt(ps.label);
+					if (label > res.pageNum) {
+						wantedPage = label;
+						p = ps;
+						break;
+					}
+				}
+			}
+			if (c != null) c.close();
+			if (p == null || wantedPage == 1) return;
+			req.start = p.start;
+		}
 		startService(new Intent(this, SearchService.class).putExtra(SearchService.OP, SearchService.OP_SEARCH)
 				.putExtra(SearchService.EX_SEARCH_REQ, req));
 	}
@@ -136,7 +172,7 @@ public class SearchActivity extends ActionBarActivity implements LoaderCallbacks
 		            if (searchMenuItem != null) {
 		                searchMenuItem.collapseActionView();
 		            }
-					return false;
+					return true;
 				}
 				
 				@Override
@@ -175,6 +211,8 @@ public class SearchActivity extends ActionBarActivity implements LoaderCallbacks
 	private BroadcastReceiver mEventReceiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
+			mResultCursor = intent.getParcelableExtra(SearchService.EX_CURSOR);
+			mScrollListener.loading = false;
 			setProgressBarIndeterminateVisibility(false);
 		}
 	};
@@ -214,4 +252,47 @@ public class SearchActivity extends ActionBarActivity implements LoaderCallbacks
 	public void onLoaderReset(Loader<Cursor> arg0) {
 		mAdapter.changeCursor(null);
 	}
+
+	@Override
+	protected void onSaveInstanceState(Bundle outState) {
+		super.onSaveInstanceState(outState);
+		if (mQuery != null) outState.putString("query", mQuery);
+		if (mResultCursor != null) outState.putParcelable("results", mResultCursor);
+	}
+
+    public class EndlessScrollListener implements OnScrollListener {
+
+        private int visibleThreshold = 5;
+        private int currentPage = 0;
+        private int previousTotal = 0;
+        private boolean loading = true;
+
+        public EndlessScrollListener() {
+        }
+        public EndlessScrollListener(int visibleThreshold) {
+            this.visibleThreshold = visibleThreshold;
+        }
+
+        @Override
+        public void onScroll(AbsListView view, int firstVisibleItem,
+                int visibleItemCount, int totalItemCount) {
+            if (loading) {
+                if (totalItemCount > previousTotal) {
+                    loading = false;
+                    previousTotal = totalItemCount;
+                    currentPage++;
+                }
+            }
+            if (!loading && (totalItemCount - visibleItemCount) <= (firstVisibleItem + visibleThreshold)) {
+                // I load the next page of gigs using a background task,
+                // but you can call any function here.
+                doSearch(false, mQuery);
+                loading = true;
+            }
+        }
+
+        @Override
+        public void onScrollStateChanged(AbsListView view, int scrollState) {
+        }
+    }
 }

@@ -104,11 +104,13 @@ public class ImageSearchProvider extends ContentProvider {
 			String arg4) {
 		SQLiteDatabase db = mHelper.getReadableDatabase();
 		String table = null;
-		String sortOrder = null;
+		String sortOrder = arg4;
 		switch(sUriMatcher.match(arg0)) {
 		case IMAGES:
 			table = ImageResult.TABLE_NAME;
-			sortOrder = ImageResult.COL_SER_NUM + " ASC";
+			if (sortOrder == null) {
+				sortOrder = ImageResult.COL_SER_NUM + " ASC";
+			}
 			break;
 		}
 		Cursor c = null;

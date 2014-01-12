@@ -9,7 +9,9 @@ import org.apache.http.HttpStatus;
 import android.app.Service;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.database.Cursor;
 import android.os.IBinder;
+import android.os.Parcelable;
 import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
 
@@ -30,6 +32,7 @@ public class SearchService extends Service {
 	public static final int OP_DOWNLOAD_IMAGE = 2;
 
 	public static final String EX_SEARCH_REQ = "query";
+	public static final String EX_CURSOR = "cursor";
 	public static final String EX_STATUS = "status";
 
 	Set<ServiceRequest> requests = new HashSet<ServiceRequest>();
@@ -76,9 +79,10 @@ public class SearchService extends Service {
 				.toArray(new ContentValues[0]));
 	}
 
-	private void signalCompletion(ServiceRequest request, int status) {
-		LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(ACTION)
-					.putExtra(EX_STATUS, status));
+	private void signalCompletion(ServiceRequest request, Parcelable p, int status) {
+		Intent intent = new Intent(ACTION).putExtra(EX_STATUS, status);
+		if (p != null)intent.putExtra(EX_CURSOR, p);
+		LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
 		synchronized(requests) {
 			requests.remove(request);
 			if (requests.size() == 0) {
@@ -101,6 +105,18 @@ public class SearchService extends Service {
 		public void run() {
 			int status = StatusCode.CLIENT_DOWNLOAD_ERROR;
 			int retry = 0;
+			Parcelable p = null;
+			Cursor c = getContentResolver().query(ImageResult.URI, null
+					, ImageResult.COL_SER_NUM + " >= " + request.start, null, ImageResult.COL_SER_NUM
+					+ " DESC");
+			try {
+				if (c != null && c.moveToFirst()) {
+					ImageResult res = ImageResult.fromCursor(c);
+					request.start = res.serialNum + 1;
+				}
+			} finally {
+				if (c != null) c.close();
+			}
 			while (retry < 3 && status != StatusCode.OK) {
 				try {
 					request.addParameters();
@@ -112,6 +128,7 @@ public class SearchService extends Service {
 							status = result.getResponseStatus() == HttpStatus.SC_OK ? StatusCode.OK
 									: StatusCode.CLIENT_DOWNLOAD_ERROR;
 							if (status == StatusCode.OK) {
+								p = result.data.cursor;
 								storeSearchResults(request, result);
 							}
 						} else {
@@ -131,7 +148,7 @@ public class SearchService extends Service {
 					}
 				}
 			}
-			signalCompletion(request, status);
+			signalCompletion(request, p, status);
 		}
 	}
 }

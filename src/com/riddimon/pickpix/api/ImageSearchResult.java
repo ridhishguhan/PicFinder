@@ -7,10 +7,11 @@ import android.content.ContentValues;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.riddimon.pickpix.api.ResultCursor.Page;
 
 public class ImageSearchResult extends ServiceResult {
 	@JsonProperty("responseData")
-	ResponseData data;
+	public ResponseData data;
 
 	@JsonIgnore
 	public List<ContentValues> getStorableResults(String queryString) {
@@ -18,9 +19,10 @@ public class ImageSearchResult extends ServiceResult {
 		if (data.results != null) {
 			store = new ArrayList<ContentValues>(data.results != null ? data.results.size() : 0);
 			int pageNum = data.cursor.currentPage;
-			int serNum = data.cursor.pages.get(pageNum).start;
+			Page p = data.cursor.pages.get(pageNum);
+			int serNum = p.start;
 			for (ImageResult res : data.results) {
-				res.pageNum = pageNum;
+				res.pageNum = Integer.parseInt(p.label);
 				res.serialNum = serNum++;
 				res.query = queryString;
 				store.add(res.toContentValues());
