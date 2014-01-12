@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.app.SearchManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -12,6 +11,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.SearchRecentSuggestions;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBarActivity;
@@ -22,7 +22,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
 
-import com.riddimon.pickpix.util.StatusCode;
+import com.riddimon.pickpix.api.ImageSearchRequest;
+import com.riddimon.pickpix.db.SearchProvider;
 
 public class SearchActivity extends ActionBarActivity {
 	private static final Logger logger = LoggerFactory.getLogger(SearchActivity.class.getSimpleName());
@@ -36,11 +37,25 @@ public class SearchActivity extends ActionBarActivity {
 		setContentView(R.layout.activity_search);
 	}
 
+	@Override
+	protected void onNewIntent(Intent intent) {
+		super.onNewIntent(intent);
+
+	    if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
+	        String query = intent.getStringExtra(SearchManager.QUERY);
+	        SearchRecentSuggestions suggestions = new SearchRecentSuggestions(this,
+	                SearchProvider.AUTHORITY, SearchProvider.MODE);
+	        suggestions.saveRecentQuery(query, null);
+	        doSearch(query);
+	    }
+	}
+
 	
 	private void listenForResults(boolean listen) {
 		LocalBroadcastManager lbm = LocalBroadcastManager.getInstance(this);
 		if (listen && !mRegistered) {
 			IntentFilter filter = new IntentFilter();
+			filter.addAction(SearchService.ACTION);
 			lbm.registerReceiver(mEventReceiver, filter);
 			mRegistered = true;
 		} else if (!listen && mRegistered) {
@@ -52,6 +67,28 @@ public class SearchActivity extends ActionBarActivity {
 	private void doSearch(String query) {
 		// do search s
 		setProgressBarIndeterminateVisibility(true);
+		ImageSearchRequest req = new ImageSearchRequest();
+		req.query = query;
+		req.pageSize = 8;
+		req.start = 0;
+		startService(new Intent(this, SearchService.class).putExtra(SearchService.OP, SearchService.OP_SEARCH)
+				.putExtra(SearchService.EX_SEARCH_REQ, req));
+	}
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Pass the event to ActionBarDrawerToggle, if it returns
+        // true, then it has handled the app icon touch event
+        // Handle your other action bar items...
+	    boolean handled = super.onOptionsItemSelected(item);
+	    if (!handled) {
+	    	switch(item.getItemId()) {
+	    	case R.id.action_search:
+	    		onSearchRequested();
+	    		handled = true;
+	    	}
+	    }
+	    return handled;
 	}
 
 	@SuppressLint("NewApi")
@@ -59,7 +96,7 @@ public class SearchActivity extends ActionBarActivity {
 	public boolean onCreateOptionsMenu(Menu menu) {
 		logger.trace("Browse Activity : onCreateOptionsMenu");
 		menu.clear();
-		getMenuInflater().inflate(R.menu.browse, menu);
+		getMenuInflater().inflate(R.menu.search, menu);
 		   // Get the SearchView and set the searchable configuration
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
 		    SearchManager searchManager = (SearchManager) getSystemService(Context

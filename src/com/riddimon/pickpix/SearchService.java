@@ -20,10 +20,11 @@ import com.riddimon.pickpix.api.ImageSearchResult;
 import com.riddimon.pickpix.api.ServiceRequest;
 import com.riddimon.pickpix.util.JsonUtil;
 import com.riddimon.pickpix.util.StatusCode;
+import com.riddimon.pickpix.util.TaskExecutor;
 
 public class SearchService extends Service {
 	public static final String OP = "operation";
-	public static final String ACTION = "TRACE_NODE_FINISH";
+	public static final String ACTION = "SEARCH_COMPLETED";
 
 	public static final int OP_SEARCH = 1;
 	public static final int OP_DOWNLOAD_IMAGE = 2;
@@ -62,7 +63,7 @@ public class SearchService extends Service {
 				}
 			}
 		} else {
-			
+			TaskExecutor.submit(this, run);
 		}
 		return START_STICKY;
 	}
