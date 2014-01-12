@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class ResultCursor {
 	public static class Page {
-		public String start;
+		public int start;
 		public String label;
 	}
 

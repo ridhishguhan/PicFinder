@@ -21,5 +21,4 @@ public class ImageSearchRequest extends ServiceRequest {
 		if (start != null) addParameter("start", start);
 		if (pageSize != null) addParameter("rsz", pageSize);
 	}
-
 }
