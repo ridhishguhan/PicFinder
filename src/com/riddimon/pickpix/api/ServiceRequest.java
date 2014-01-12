@@ -65,7 +65,7 @@ public class ServiceRequest implements Cloneable {
 	}
 
 	public void addParameters() {
-		addParameter("ver", ServiceApi.VERSION);
+		addParameter("v", ServiceApi.VERSION);
 	}
 
 	protected void setupPathParamz() {}

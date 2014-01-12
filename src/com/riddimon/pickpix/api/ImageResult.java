@@ -5,6 +5,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.provider.BaseColumns;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -22,11 +23,13 @@ public class ImageResult implements Parcelable{
 	public static final String COL_WIDTH = "width";
 	public static final String COL_PAGE_URL = "pageUrl";
 	public static final String COL_THUMB_URL = "thumbUrl";
-	public static final String COL_IMAGE_URL = "pageUrl";
+	public static final String COL_IMAGE_URL = "imageUrl";
 
 	public static String TABLE_NAME = "images";
 	public static String CREATE_TABLE_STATEMENT = "create table " + TABLE_NAME
-			+ " (" + COL_SER_NUM + " integer primary key, "
+			+ " ("
+			+ BaseColumns._ID + " integer primary key, "
+			+ COL_SER_NUM + " integer , "
 			+ COL_IMAGE_ID + " varchar(256) not null, "
 			+ COL_TITLE + " varchar(256), "
 			+ COL_QUERY + " varchar(256), "

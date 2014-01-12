@@ -9,9 +9,14 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.Cursor;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.SearchRecentSuggestions;
+import android.support.v4.app.LoaderManager;
+import android.support.v4.app.LoaderManager.LoaderCallbacks;
+import android.support.v4.content.CursorLoader;
+import android.support.v4.content.Loader;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBarActivity;
@@ -21,20 +26,36 @@ import android.support.v7.widget.SearchView.OnSuggestionListener;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
+import android.widget.GridView;
 
+import com.riddimon.pickpix.api.ImageResult;
 import com.riddimon.pickpix.api.ImageSearchRequest;
 import com.riddimon.pickpix.db.SearchProvider;
 
-public class SearchActivity extends ActionBarActivity {
+public class SearchActivity extends ActionBarActivity implements LoaderCallbacks<Cursor> {
 	private static final Logger logger = LoggerFactory.getLogger(SearchActivity.class.getSimpleName());
 	private static final int LOADER = 1;
 	private boolean mRegistered;
+	private String mQuery;
+
+	SampleGridViewAdapter mAdapter = null;
+	GridView mGridview = null;
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
 		listenForResults(true);
 		setContentView(R.layout.activity_search);
+		mGridview = (GridView) findViewById(R.id.grid_view);
+		mAdapter = new SampleGridViewAdapter(this, null);
+		mGridview.setAdapter(mAdapter);
+		LoaderManager lm = getSupportLoaderManager();
+		Loader<Cursor> l = lm.getLoader(LOADER);
+		if (l != null) {
+			lm.restartLoader(LOADER, null, this);
+		} else {
+			lm.initLoader(LOADER, null, this);
+		}
 	}
 
 	@Override
@@ -71,6 +92,7 @@ public class SearchActivity extends ActionBarActivity {
 		req.query = query;
 		req.pageSize = 8;
 		req.start = 0;
+		getContentResolver().delete(ImageResult.URI, null, null);
 		startService(new Intent(this, SearchService.class).putExtra(SearchService.OP, SearchService.OP_SEARCH)
 				.putExtra(SearchService.EX_SEARCH_REQ, req));
 	}
@@ -169,5 +191,27 @@ public class SearchActivity extends ActionBarActivity {
 	protected void onDestroy() {
 		listenForResults(false);
 		super.onDestroy();
+	}
+
+	@Override
+	public Loader<Cursor> onCreateLoader(int arg0, Bundle arg1) {
+		// TODO Auto-generated method stub
+		String selection = null;
+		if (mQuery != null) {
+			selection = ImageResult.COL_QUERY + " = '"
+					+ mQuery + "'";
+		}
+		return new CursorLoader(this, ImageResult.URI, null
+				, selection, null, ImageResult.COL_SER_NUM + " ASC");
+	}
+
+	@Override
+	public void onLoadFinished(Loader<Cursor> arg0, Cursor arg1) {
+		mAdapter.changeCursor(arg1);
+	}
+
+	@Override
+	public void onLoaderReset(Loader<Cursor> arg0) {
+		mAdapter.changeCursor(null);
 	}
 }

@@ -10,7 +10,16 @@ import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Map;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -29,26 +38,30 @@ import org.slf4j.LoggerFactory;
 
 import android.content.Context;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.net.ConnectivityManager;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
+
+import com.riddimon.pickpix.util.Utils;
 
 /**
  * Utility class for HTTP calls
  * @author ridhishguhan
  */
 public class HttpUtils {
-	public static final String userAgent = "pickpix/android";
+	public static final String userAgent = "kryptos/android";
 	public enum HttpMethod {
 		GET, POST, PUT, DELETE, INVALID
 	}
 	private static final Logger logger = LoggerFactory
 			.getLogger(HttpUtils.class);
 
-	private static HttpUtils instance;
-
 	private String version = "";
 	private Context context;
-
+	private static HttpUtils instance;
 
 	private HttpUtils(Context context) {
 		// private constructor to prevent instantiation
@@ -57,6 +70,22 @@ public class HttpUtils {
 			// get version number to be set as part of user agent string
 			version = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
 		} catch (NameNotFoundException e) {}
+		if (Utils.DEV_ENV) {
+			HttpsURLConnection.setDefaultHostnameVerifier(new HostnameVerifier() {
+				@Override
+				public boolean verify(String hostname, SSLSession session) {
+					return true;
+				}
+			});
+			try {
+				TrustManager[] trustManagers = new X509TrustManager[1];
+				trustManagers[0] = new TrustAllManager();
+
+				SSLContext sc = SSLContext.getInstance("SSL");
+				sc.init(null, trustManagers, null);
+				HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+			} catch (Exception ex) {}
+		}
 		enableHttpResponseCache();
 	}
 
@@ -78,6 +107,54 @@ public class HttpUtils {
 		if (instance == null)
 			instance = new HttpUtils(context);
 		return instance;
+	}
+
+	/**
+	 * Used to refer to connection status while executing HTTP transactions
+	 */
+	public enum ConnectionStatus {
+		BOTH_CONNECTED, WIFI_CONNECTED, DATA_CONNECTED, CONNECTING, NO_CONNECTION
+	}
+
+	/**
+	 * Used for bypass problem with self-signed certificates in SSL connections
+	 */
+	public static class TrustAllManager implements javax.net.ssl.TrustManager, javax.net.ssl.X509TrustManager {
+
+		@Override
+		public void checkClientTrusted(X509Certificate[] arg0, String arg1)	throws CertificateException {
+		}
+
+		@Override
+		public void checkServerTrusted(X509Certificate[] arg0, String arg1) throws CertificateException {
+		}
+
+		@Override
+		public X509Certificate[] getAcceptedIssuers() {
+			return null;
+		}
+	}
+
+
+	/**
+	 * Uses ConnectivityManager API to check for connectivity
+	 * @param context
+	 * @return true || false
+	 */
+	public boolean isConnected(Context context) {
+		ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+
+		// test for connection
+		if (cm.getActiveNetworkInfo() != null
+				&& cm.getActiveNetworkInfo().isAvailable()
+				&& cm.getActiveNetworkInfo().isConnected()) {
+			logger.info("Connection available : <", cm.getActiveNetworkInfo().toString() + ">");
+			return true;
+		} else {
+			// no connection
+			logger.info("No connectivity.");
+			return false;
+		}
 	}
 
 	private static String getEncodedParameters(Map<String, String> params) {
@@ -144,7 +221,6 @@ public class HttpUtils {
 					url = paramz.size() > 0 ? url + "?" + query : url;
 					if (method.equals(HttpMethod.GET)) {
 						req = new HttpGet(url);
-						req.setHeader("Referer", "http://www.fieldwire.net");
 					} else if (method.equals(HttpMethod.DELETE)){
 						req = new HttpDelete(url);
 					}
@@ -169,7 +245,8 @@ public class HttpUtils {
 						}
 					}
 				}
-				HttpResponse httpResponse = HttpManager.execute(req, version);
+				HttpResponse httpResponse = HttpManager.execute(req, Utils.DEV_ENV
+						, version);
 				int statusCode = httpResponse.getStatusLine().getStatusCode();
 				if (statusCode != HttpStatus.SC_OK) {
 					logger.warn("HTTP request failed with status code: {}", statusCode);
@@ -186,8 +263,6 @@ public class HttpUtils {
 				URL uri = new URL(url);
 				conn = (HttpURLConnection) uri.openConnection();
 				conn.setRequestProperty("User-Agent", userAgent + "/" + version);
-				// required by api
-				conn.setRequestProperty("Referer", "http://www.fieldwire.net");
 				conn.setDoInput(true);
 		        conn.setReadTimeout(60 * 1000 /* milliseconds */);
 		        conn.setConnectTimeout(60 * 1000 /* milliseconds */);
@@ -226,5 +301,53 @@ public class HttpUtils {
 			throw e1;
 		}
 		return builder.toString();
+	}
+
+	/**
+	 * Uses TelephonyManager and WifiManager to check for network connectivity.
+	 * Also incorporates CONNECTING state for retry scenarios.
+	 * @param context
+	 * @return ConnectionStatus
+	 */
+	public ConnectionStatus isConnectedOLD(Context context) {
+		boolean data = false, wifi = false;
+		boolean data_connecting = false, wifi_connecting = false;
+		TelephonyManager tm = (TelephonyManager) context
+				.getSystemService(Context.TELEPHONY_SERVICE);
+		WifiManager wm = (WifiManager) context
+				.getSystemService(Context.WIFI_SERVICE);
+		int ds = tm.getDataState();
+		int ws = wm.getWifiState();
+		switch (ds) {
+		case TelephonyManager.DATA_CONNECTED:
+			data = true;
+			break;
+		case TelephonyManager.DATA_CONNECTING:
+			data_connecting = true;
+		default:
+			data = false;
+			data_connecting = false;
+		}
+
+		switch (ws) {
+		case WifiManager.WIFI_STATE_ENABLING:
+			wifi_connecting = true;
+		case WifiManager.WIFI_STATE_DISABLING:
+		case WifiManager.WIFI_STATE_DISABLED:
+		case WifiManager.WIFI_STATE_UNKNOWN:
+			wifi = false;
+			break;
+		case WifiManager.WIFI_STATE_ENABLED:
+			WifiInfo wi = wm.getConnectionInfo();
+			if (wi != null)
+				wifi = true;
+			break;
+		}
+
+		if (wifi && data) return ConnectionStatus.BOTH_CONNECTED;
+		else if (wifi && data_connecting) return ConnectionStatus.WIFI_CONNECTED;
+		else if (data && wifi_connecting) return ConnectionStatus.DATA_CONNECTED;
+		else if (wifi_connecting || data_connecting) return ConnectionStatus.CONNECTING;
+		return ConnectionStatus.NO_CONNECTION;
 	}
 }

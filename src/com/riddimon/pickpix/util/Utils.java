@@ -17,7 +17,7 @@ import android.support.v4.content.CursorLoader;
 public class Utils {
 
 	public static final Boolean CLIENT_INVALID_REQUEST = true;
-
+	public static final boolean DEV_ENV = true;
 	public static String getRealPathFromURI(Context context, Uri contentUri) {
 		String[] proj = { MediaStore.Images.Media.DATA };
 		ContentResolver cr = context.getContentResolver();

@@ -11,13 +11,13 @@ public class ResultCursor {
 	}
 
 	@JsonProperty("resultCount")
-	public int count;
+	public String count;
 
 	@JsonProperty("pages")
 	public List<Page> pages;
 
 	@JsonProperty("estimatedResultCount")
-	public int resultCount;
+	public String resultCount;
 
 	@JsonProperty("currentPageIndex")
 	public int currentPage;

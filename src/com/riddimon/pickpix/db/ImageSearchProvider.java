@@ -16,7 +16,7 @@ public class ImageSearchProvider extends ContentProvider {
 	public static final String AUTHORITY = "com.riddimon.pickpix.provider";
 
 	private static final String DB_NAME = "pickpix.db";
-	private static final int VERSION = 1;
+	private static final int VERSION = 3;
 
 	private static final UriMatcher sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
 	private static final int IMAGES = 1;
@@ -46,6 +46,10 @@ public class ImageSearchProvider extends ContentProvider {
 		}
 	}
 
+	private void notify(Uri uri) {
+		getContext().getContentResolver().notifyChange(uri, null);
+	}
+
 	@Override
 	public int delete(Uri arg0, String arg1, String[] arg2) {
 		SQLiteDatabase db = mHelper.getWritableDatabase();
@@ -58,6 +62,7 @@ public class ImageSearchProvider extends ContentProvider {
 		int del = 0;
 		if (table != null) {
 			del = db.delete(table, arg1, arg2);
+			if (del > 0) notify(arg0);
 		}
 		return del;
 	}
@@ -67,6 +72,7 @@ public class ImageSearchProvider extends ContentProvider {
 		return null;
 	}
 
+	
 	@Override
 	public Uri insert(Uri arg0, ContentValues arg1) {
 		SQLiteDatabase db = mHelper.getWritableDatabase();
@@ -81,6 +87,7 @@ public class ImageSearchProvider extends ContentProvider {
 			long id = db.insert(table, null, arg1);
 			if (id != -1) {
 				uri = Uri.withAppendedPath(uri, String.valueOf(id));
+				notify(arg0);
 			}
 		}
 		return uri;
@@ -110,6 +117,9 @@ public class ImageSearchProvider extends ContentProvider {
 			builder.setTables(table);
 			c = builder.query(db, arg1, arg2, arg3, null, null, sortOrder);
 		}
+		if (c!= null) {
+			c.setNotificationUri(getContext().getContentResolver(), arg0);
+		}
 		return c;
 	}
 
@@ -126,7 +136,32 @@ public class ImageSearchProvider extends ContentProvider {
 		if (table != null) {
 			updated = db.update(table, arg1, arg2, arg3);
 		}
+		notify(arg0);
 		return updated;
 	}
 
+	@Override
+	public int bulkInsert(Uri uri, ContentValues[] values) {
+		SQLiteDatabase db = mHelper.getWritableDatabase();
+		String table = null;
+		switch(sUriMatcher.match(uri)) {
+		case IMAGES:
+			table = ImageResult.TABLE_NAME;
+			break;
+		}
+		int ins = 0;
+		if (table != null && values != null) {
+			db.beginTransaction();
+			for (ContentValues value : values) {
+				long id = db.insert(table, null, value);
+				++ins;
+			}
+			db.setTransactionSuccessful();
+			db.endTransaction();
+		}
+		if (ins > 0) {
+			notify(uri);
+		}
+		return ins;
+	}
 }

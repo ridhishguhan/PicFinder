@@ -69,6 +69,8 @@ public class SearchService extends Service {
 	}
 
 	private void storeSearchResults(ImageSearchRequest req, ImageSearchResult results) {
+		getContentResolver().delete(ImageResult.URI, ImageResult.COL_QUERY + " != '"
+				+ req.query + "'", null);
 		getContentResolver().bulkInsert(ImageResult.URI
 				, results.getStorableResults(req.query)
 				.toArray(new ContentValues[0]));
@@ -101,6 +103,7 @@ public class SearchService extends Service {
 			int retry = 0;
 			while (retry < 3 && status != StatusCode.OK) {
 				try {
+					request.addParameters();
 					String res = HttpUtils.execute(SearchService.this, request.method
 							, request.getServicePath(), request.getParamz());
 					if (!TextUtils.isEmpty(res)) {

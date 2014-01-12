@@ -50,6 +50,11 @@
             android:enabled="true"
             android:exported="false"/>
         
+        <provider
+            android:name="com.riddimon.pickpix.db.ImageSearchProvider"
+            android:authorities="com.riddimon.pickpix.provider"
+            android:enabled="true"
+            android:exported="false"/>
     </application>
 
 </manifest>

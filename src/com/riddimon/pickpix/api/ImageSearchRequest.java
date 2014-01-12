@@ -7,7 +7,7 @@ import com.riddimon.pickpix.api.HttpUtils.HttpMethod;
 
 public class ImageSearchRequest extends ServiceRequest implements Parcelable {
 	private static final ServiceApi API = new ServiceApi("https", "ajax.googleapis.com"
-			, 80, "ajax/services/search/images");
+			, 443, "ajax/services/search/images");
 
 	public String query;
 	public Integer start = 0;
